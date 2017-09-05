@@ -94,15 +94,15 @@
 		background-position: top left,		center center,		bottom center;
 		background-attachment: fixed,			fixed,				fixed;*/
 		height: 100%;
-		background-color: #000000;
-		background-image: url("../../images/bg.jpg");
+		background-color: #49515e;
+		// background-image: url("../../images/bg.jpg");
 		background-repeat: no-repeat;
 		background-size: 400px;
 		background-position: top left;
 		background-attachment: fixed,			fixed,				fixed;
 	}
 
-		body:after {
+		/*body:after {
 			content: '';
 			display: block;
 			position: fixed;
@@ -124,7 +124,7 @@
 			-webkit-transition: opacity 1.75s ease-out;
 			-ms-transition: opacity 1.75s ease-out;
 			transition: opacity 1.75s ease-out;
-		}
+		}*/
 
 		body.is-loading:after {
 			opacity: 1;
