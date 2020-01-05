@@ -1,0 +1,641 @@
+<!DOCTYPE html>
+<html class="mozilla"><head>
+    <title>[#MANTA-4856] nameservice zone filling up with zookeeper logs</title>
+    <meta http-equiv="Content-Type" content="text/html; charset=UTF-8">
+            
+        <script>
+window.WRM=window.WRM||{};window.WRM._unparsedData=window.WRM._unparsedData||{};window.WRM._unparsedErrors=window.WRM._unparsedErrors||{};
+WRM._unparsedData["com.atlassian.plugins.atlassian-plugins-webresource-plugin:context-path.context-path"]="\"\"";
+WRM._unparsedData["jira.webresources:feature-flags.feature-flag-data"]="{\"enabled-feature-keys\":[\"com.atlassian.jira.agile.darkfeature.editable.detailsview\",\"nps.survey.inline.dialog\",\"com.atlassian.jira.agile.darkfeature.edit.closed.sprint.enabled\",\"jira.plugin.devstatus.phasetwo\",\"jira.frother.reporter.field\",\"atlassian.rest.xsrf.legacy.enabled\",\"jira.issue.status.lozenge\",\"com.atlassian.jira.config.BIG_PIPE\",\"com.atlassian.jira.config.PDL\",\"jira.plugin.devstatus.phasetwo.enabled\",\"atlassian.aui.raphael.disabled\",\"app-switcher.new\",\"frother.assignee.field\",\"com.atlassian.jira.projects.ProjectCentricNavigation.Switch\",\"jira.onboarding.cyoa\",\"com.atlassian.jira.agile.darkfeature.kanplan.enabled\",\"com.atlassian.jira.config.ProjectConfig.MENU\",\"com.atlassian.jira.projects.sidebar.DEFER_RESOURCES\",\"com.atlassian.jira.agile.darkfeature.kanplan.epics.and.versions.enabled\",\"com.atlassian.jira.agile.darkfeature.sprint.goal.enabled\",\"jira.zdu.admin-updates-ui\",\"jira.zdu.jmx-monitoring\",\"sd.new.settings.sidebar.location.disabled\",\"jira.zdu.cluster-upgrade-state\",\"com.atlassian.jira.agile.darkfeature.splitissue\",\"com.atlassian.jira.config.CoreFeatures.LICENSE_ROLES_ENABLED\",\"com.atlassian.feedback.feedback-button-move-to-header-enable\",\"jira.export.csv.enabled\"],\"feature-flag-states\":{\"com.atlassian.jira.agile.darkfeature.kanplan\":false,\"jira.sal.host.connect.accessor.existing.transaction.will.create.transactions\":true,\"jira.jql.suggestrecentfields\":false,\"jira.instrumentation.laas\":false,\"com.atlassian.jira.agile.darkfeature.kanplan.epics.and.versions\":false,\"jira.jql.smartautoselectfirst\":false,\"com.atlassian.jira.agile.darkfeature.edit.closed.sprint\":false,\"jira.create.linked.issue\":true,\"com.atlassian.jira.upgrade.startup.fix.index\":true,\"com.atlassian.jira.agile.darkfeature.sprint.goal\":false}}";
+WRM._unparsedData["jira.webresources:default-comment-security-level.DefaultCommentSecurityLevelHelpLink"]="{\"extraClasses\":\"default-comment-level-help\",\"title\":\"Commenting on an Issue\",\"url\":\"https://docs.atlassian.com/jira/jsw-docs-075/Editing+and+collaborating+on+issues#Editingandcollaboratingonissues-restrictacomment\",\"isLocal\":false}";
+WRM._unparsedData["jira.request.correlation-id"]="\"457ed7c6520d78\"";
+WRM._unparsedData["tzdetect.pref.auto.detect"]="true";
+WRM._unparsedData["tzdetect.pref.tzid"]="\"America/Los_Angeles\"";
+WRM._unparsedData["tzdetect.pref.tzname"]="\"(GMT-08:00) Los Angeles\"";
+WRM._unparsedData["tzdetect.pref.janOffset"]="-28800000";
+WRM._unparsedData["tzdetect.pref.julyOffset"]="-25200000";
+if(window.WRM._dataArrived)window.WRM._dataArrived();</script>
+<link type="text/css" rel="stylesheet" href="zk-writeup_files/batch.css" data-wrm-key="_super" data-wrm-batch-type="context" media="all">
+<link type="text/css" rel="stylesheet" href="zk-writeup_files/com.css" data-wrm-key="com.atlassian.auiplugin:aui-labels" data-wrm-batch-type="resource" media="all">
+<link type="text/css" rel="stylesheet" href="zk-writeup_files/jira.css" data-wrm-key="jira.webresources:global-static" data-wrm-batch-type="resource" media="all">
+<script type="text/javascript" src="zk-writeup_files/batch.js" data-wrm-key="_super" data-wrm-batch-type="context" data-initially-rendered=""></script><style id="zoomLevel-styles"></style><style type="text/css"></style><style type="text/css"></style>
+<script type="text/javascript" src="zk-writeup_files/com.js" data-wrm-key="com.atlassian.jira.jira-tzdetect-plugin:tzdetect-banner-component" data-wrm-batch-type="resource" data-initially-rendered=""></script>
+<script type="text/javascript" src="zk-writeup_files/com_002.js" data-wrm-key="com.atlassian.jira.jira-tzdetect-plugin:tzdetect-lib" data-wrm-batch-type="resource" data-initially-rendered=""></script>
+
+        <style type="text/css">
+
+.tableBorder, .grid
+{
+    background-color: #fff;
+    width: 100%;
+    border-collapse: collapse;
+}
+
+.tableBorder td, .grid td
+{
+    vertical-align: top;
+    padding: 2px;
+    border: 1px solid #ccc;
+}
+
+.noPadding
+{
+    padding: 0 !important;
+}
+
+h3 .subText
+{
+    font-size: 60%;
+    font-weight: normal;
+}
+
+.tabLabel
+{
+    font-weight: bold;
+    border: 1px solid #ccc;
+    border-bottom:none;
+    padding: 2px;
+    display: inline;
+}
+
+td.blank
+{
+    padding: 0;
+    margin: 0;
+}
+
+.blank td
+{
+    border: none;
+}
+
+#descriptionArea
+{
+    margin: 0;
+    padding: 2px;
+    border: 1px solid #ccc;
+}
+
+hr
+{
+    border-top:1px solid #aaa;
+}
+
+hr.fullcontent
+{
+  height: 15px;
+  padding: 10px 0;
+  background: #fff url('https://jira.joyent.us/images/icons/hr.gif') no-repeat scroll center;
+}
+
+</style>
+
+</head>
+<body style="font-size: 14px !important; line-height: 20px !important;" data-aui-version="6.0.0">
+<header id="previous-view" style="font-size: 14px !important; line-height: 20px !important;">
+    <nav class="aui-toolbar" style="font-size: 14px !important; line-height: 20px !important;">
+        <div class="toolbar-split toolbar-split-right" style="font-size: 14px !important; line-height: 20px !important;">
+            <ul class="toolbar-group" style="font-size: 14px !important; line-height: 20px !important;">
+                <li class="toolbar-item" style="font-size: 14px !important; line-height: 20px !important;">
+                    <a href="https://jira.joyent.us/browse/MANTA-4856" class="toolbar-trigger" style="font-size: 14px !important; line-height: 20px !important;">Back to previous view</a>
+                </li>
+            </ul>
+        </div>
+    </nav>
+</header>
+<table class="tableBorder" style="font-size: 14px !important; line-height: 20px !important;" width="100%" cellspacing="0" cellpadding="0" border="0">
+    <tbody style="font-size: 14px !important; line-height: 20px !important;"><tr style="font-size: 14px !important; line-height: 20px !important;">
+        <td colspan="2" style="font-size: 14px !important; line-height: 20px !important;" width="100%" valign="top" bgcolor="#f0f0f0">
+                            <h3 class="formtitle" style="font-size: 16px !important; line-height: 24px !important;">
+                        [MANTA-4856]&nbsp;<a href="https://jira.joyent.us/browse/MANTA-4856" style="font-size: 16px !important; line-height: 24px !important;">nameservice zone filling up with zookeeper logs</a>
+            <span class="subText" style="font-size: 9.6px !important; line-height: 14.4px !important;">
+               Created: 10/Dec/19                   &nbsp;Updated: 19/Dec/19
+
+                                            </span>
+            </h3>
+        </td>
+    </tr>
+    <tr style="font-size: 14px !important; line-height: 20px !important;">
+        <td style="font-size: 14px !important; line-height: 20px !important;" width="20%"><b style="font-size: 14px !important; line-height: 20px !important;">Status:</b></td>
+        <td style="font-size: 14px !important; line-height: 20px !important;" width="80%">In Progress</td>
+    </tr>
+    <tr style="font-size: 14px !important; line-height: 20px !important;">
+        <td style="font-size: 14px !important; line-height: 20px !important;" width="20%"><b style="font-size: 14px !important; line-height: 20px !important;">Project:</b></td>
+        <td style="font-size: 14px !important; line-height: 20px !important;" width="80%"><a href="https://jira.joyent.us/secure/BrowseProject.jspa?id=10138" style="font-size: 14px !important; line-height: 20px !important;">MANTA</a></td>
+    </tr>
+
+        <tr style="font-size: 14px !important; line-height: 20px !important;">
+            <td style="font-size: 14px !important; line-height: 20px !important;"><b style="font-size: 14px !important; line-height: 20px !important;">Component/s:</b></td>
+            <td style="font-size: 14px !important; line-height: 20px !important;">
+                            None
+                </td>
+    </tr>
+    
+
+        <tr style="font-size: 14px !important; line-height: 20px !important;">
+            <td style="font-size: 14px !important; line-height: 20px !important;"><b style="font-size: 14px !important; line-height: 20px !important;">Affects Version/s:</b></td>
+            <td style="font-size: 14px !important; line-height: 20px !important;">
+                            None
+                </td>
+    </tr>
+    
+
+        <tr style="font-size: 14px !important; line-height: 20px !important;">
+            <td style="font-size: 14px !important; line-height: 20px !important;"><b style="font-size: 14px !important; line-height: 20px !important;">Fix Version/s:</b></td>
+            <td style="font-size: 14px !important; line-height: 20px !important;">
+                            None
+                </td>
+    </tr>
+    
+    </tbody></table>
+
+<br>
+<table class="grid" style="font-size: 14px !important; line-height: 20px !important;" width="100%" cellspacing="0" cellpadding="0" border="0">
+    <tbody style="font-size: 14px !important; line-height: 20px !important;"><tr style="font-size: 14px !important; line-height: 20px !important;">
+        <td style="font-size: 14px !important; line-height: 20px !important;" width="20%" valign="top" bgcolor="#f0f0f0">
+            <b style="font-size: 14px !important; line-height: 20px !important;">Type:</b>
+        </td>
+        <td style="font-size: 14px !important; line-height: 20px !important;" width="30%" valign="top" bgcolor="#ffffff">
+            Bug
+        </td>
+
+                    <td style="font-size: 14px !important; line-height: 20px !important;" bgcolor="#f0f0f0">
+                <b style="font-size: 14px !important; line-height: 20px !important;">Priority:</b>
+            </td>
+            <td style="font-size: 14px !important; line-height: 20px !important;" valign="top" nowrap="nowrap" bgcolor="#ffffff">
+                4 - Normal
+            </td>
+            </tr>
+    <tr style="font-size: 14px !important; line-height: 20px !important;">
+                        <td style="font-size: 14px !important; line-height: 20px !important;" width="20%" valign="top" bgcolor="#f0f0f0">
+                <b style="font-size: 14px !important; line-height: 20px !important;">Reporter:</b>
+            </td>
+            <td style="font-size: 14px !important; line-height: 20px !important;" width="30%" valign="top" bgcolor="#ffffff">
+                                            <a class="user-hover" rel="dave.eddy" id="word_reporter_dave.eddy" href="https://jira.joyent.us/secure/ViewProfile.jspa?name=dave.eddy" style="font-size: 14px !important; line-height: 20px !important;">Dave Eddy</a>
+                            </td>
+        
+                    <td style="font-size: 14px !important; line-height: 20px !important;" width="20%" bgcolor="#f0f0f0">
+                <b style="font-size: 14px !important; line-height: 20px !important;">Assignee:</b>
+            </td>
+            <td style="font-size: 14px !important; line-height: 20px !important;" width="30%" valign="top" nowrap="nowrap" bgcolor="#ffffff">
+                                            <a class="user-hover" rel="isaac.davis" id="word_assignee_isaac.davis" href="https://jira.joyent.us/secure/ViewProfile.jspa?name=isaac.davis" style="font-size: 14px !important; line-height: 20px !important;">Isaac Davis</a>
+                            </td>
+            </tr>
+    	<tr style="font-size: 14px !important; line-height: 20px !important;">
+		<td style="font-size: 14px !important; line-height: 20px !important;" width="20%" bgcolor="#f0f0f0">
+			<b style="font-size: 14px !important; line-height: 20px !important;">Resolution:</b>
+		</td>
+		<td style="font-size: 14px !important; line-height: 20px !important;" width="30%" valign="top" nowrap="nowrap" bgcolor="#ffffff">
+            				Unresolved
+                    </td>
+                    <td style="font-size: 14px !important; line-height: 20px !important;" width="20%" bgcolor="#f0f0f0">
+                <b style="font-size: 14px !important; line-height: 20px !important;">Votes:</b>
+            </td>
+            <td style="font-size: 14px !important; line-height: 20px !important;" width="30%" valign="top" nowrap="nowrap" bgcolor="#ffffff">
+                0
+            </td>
+        
+    </tr>
+    
+        <tr style="font-size: 14px !important; line-height: 20px !important;">
+        <td style="font-size: 14px !important; line-height: 20px !important;" width="20%" bgcolor="#f0f0f0">
+            <b style="font-size: 14px !important; line-height: 20px !important;">Labels:</b>
+        </td>
+        <td id="labels-113971-value" class="value" colspan="3" style="font-size: 14px !important; line-height: 20px !important;" valign="top" nowrap="nowrap" bgcolor="#ffffff">
+                            None
+                    </td>
+    </tr>
+    
+    	<tr style="font-size: 14px !important; line-height: 20px !important;">
+        		<td style="font-size: 14px !important; line-height: 20px !important;" width="20%" bgcolor="#f0f0f0"><b style="font-size: 14px !important; line-height: 20px !important;">Remaining Estimate:</b></td>
+        <td colspan="3" style="font-size: 14px !important; line-height: 20px !important;" width="80%" valign="top" nowrap="nowrap" bgcolor="#ffffff">
+                            Not Specified
+            		</td>
+    </tr>
+    <tr style="font-size: 14px !important; line-height: 20px !important;">
+                <td style="font-size: 14px !important; line-height: 20px !important;" width="20%" bgcolor="#f0f0f0"><b style="font-size: 14px !important; line-height: 20px !important;">Time Spent:</b></td>
+		<td colspan="3" style="font-size: 14px !important; line-height: 20px !important;" width="80%" valign="top" nowrap="nowrap" bgcolor="#ffffff">
+                            Not Specified
+            		</td>
+	</tr>
+    <tr style="font-size: 14px !important; line-height: 20px !important;">
+                <td style="font-size: 14px !important; line-height: 20px !important;" width="20%" bgcolor="#f0f0f0"><b style="font-size: 14px !important; line-height: 20px !important;">Original Estimate:</b></td>
+		<td colspan="3" style="font-size: 14px !important; line-height: 20px !important;" width="80%" valign="top" nowrap="nowrap" bgcolor="#ffffff">
+                            Not Specified
+            		</td>
+    </tr>
+    
+    </tbody></table>
+
+
+
+    <br>
+
+    	<table class="grid" style="font-size: 14px !important;" width="100%" cellspacing="0" cellpadding="0" border="0">
+            
+
+        
+    
+
+
+
+</table>
+
+    <br>
+
+    <table style="font-size: 14px !important; line-height: 20px !important;" width="100%" cellspacing="0" cellpadding="2" border="0" align="center">
+    <tbody style="font-size: 14px !important; line-height: 20px !important;"><tr style="font-size: 14px !important; line-height: 20px !important;">
+        <td style="font-size: 14px !important; line-height: 20px !important;" width="1%" nowrap="nowrap" bgcolor="#bbbbbb" align="center">
+            &nbsp;<font style="font-size: 14px !important; line-height: 20px !important;" color="#ffffff"><b style="font-size: 14px !important; line-height: 20px !important;">Description</b></font>&nbsp;
+        </td>
+        <td style="font-size: 14px !important;">&nbsp;</td>
+    </tr>
+    </tbody></table>
+
+    <table style="font-size: 14px !important; line-height: 20px !important;" width="100%" cellspacing="0" cellpadding="0" border="0">
+    <tbody style="font-size: 14px !important; line-height: 20px !important;"><tr style="font-size: 14px !important; line-height: 20px !important;">
+        <td id="descriptionArea" style="font-size: 14px !important; line-height: 20px !important;">
+            <p style="font-size: 14px !important; line-height: 20px !important;">Recently (in the last day or so) a single nameservice zone on my test machine is filling up with zookeeper logs:</p>
+
+<div class="preformatted panel" style="border-width: 1px; font-size: 12px !important; line-height: 16px !important;"><div class="preformattedContent panelContent" style="font-size: 12px !important; line-height: 16px !important;">
+<pre style="font-size: 12px !important; line-height: 16px !important;">$ du -csh /var/log/manta/upload/zookeeper_*.log
+723M    /var/log/manta/upload/zookeeper_93b48c16-2995-40f4-8d6d-2d05aea706c9_2019-12-09T22:00:00.log
+7.5K    /var/log/manta/upload/zookeeper_93b48c16-2995-40f4-8d6d-2d05aea706c9_2019-12-09T23:00:00.log
+355M    /var/log/manta/upload/zookeeper_93b48c16-2995-40f4-8d6d-2d05aea706c9_2019-12-10T00:00:00.log
+399M    /var/log/manta/upload/zookeeper_93b48c16-2995-40f4-8d6d-2d05aea706c9_2019-12-10T01:00:00.log
+340M    /var/log/manta/upload/zookeeper_93b48c16-2995-40f4-8d6d-2d05aea706c9_2019-12-10T02:00:00.log
+376M    /var/log/manta/upload/zookeeper_93b48c16-2995-40f4-8d6d-2d05aea706c9_2019-12-10T03:00:00.log
+483M    /var/log/manta/upload/zookeeper_93b48c16-2995-40f4-8d6d-2d05aea706c9_2019-12-10T04:00:00.log
+395M    /var/log/manta/upload/zookeeper_93b48c16-2995-40f4-8d6d-2d05aea706c9_2019-12-10T05:00:00.log
+496M    /var/log/manta/upload/zookeeper_93b48c16-2995-40f4-8d6d-2d05aea706c9_2019-12-10T06:00:00.log
+5.5K    /var/log/manta/upload/zookeeper_93b48c16-2995-40f4-8d6d-2d05aea706c9_2019-12-10T07:00:00.log
+450M    /var/log/manta/upload/zookeeper_93b48c16-2995-40f4-8d6d-2d05aea706c9_2019-12-10T08:00:00.log
+11K     /var/log/manta/upload/zookeeper_93b48c16-2995-40f4-8d6d-2d05aea706c9_2019-12-10T09:00:00.log
+424M    /var/log/manta/upload/zookeeper_93b48c16-2995-40f4-8d6d-2d05aea706c9_2019-12-10T10:00:00.log
+630M    /var/log/manta/upload/zookeeper_93b48c16-2995-40f4-8d6d-2d05aea706c9_2019-12-10T11:00:00.log
+261K    /var/log/manta/upload/zookeeper_93b48c16-2995-40f4-8d6d-2d05aea706c9_2019-12-10T12:00:00.log
+7.0K    /var/log/manta/upload/zookeeper_93b48c16-2995-40f4-8d6d-2d05aea706c9_2019-12-10T13:00:00.log
+7.0K    /var/log/manta/upload/zookeeper_93b48c16-2995-40f4-8d6d-2d05aea706c9_2019-12-10T14:00:00.log
+5.0K    /var/log/manta/upload/zookeeper_93b48c16-2995-40f4-8d6d-2d05aea706c9_2019-12-10T15:00:00.log
+6.0K    /var/log/manta/upload/zookeeper_93b48c16-2995-40f4-8d6d-2d05aea706c9_2019-12-10T16:00:00.log
+7.5K    /var/log/manta/upload/zookeeper_93b48c16-2995-40f4-8d6d-2d05aea706c9_2019-12-10T17:00:00.log
+6.0K    /var/log/manta/upload/zookeeper_93b48c16-2995-40f4-8d6d-2d05aea706c9_2019-12-10T18:00:00.log
+422M    /var/log/manta/upload/zookeeper_93b48c16-2995-40f4-8d6d-2d05aea706c9_2019-12-10T19:00:00.log
+621M    /var/log/manta/upload/zookeeper_93b48c16-2995-40f4-8d6d-2d05aea706c9_2019-12-10T20:00:00.log
+690M    /var/log/manta/upload/zookeeper_93b48c16-2995-40f4-8d6d-2d05aea706c9_2019-12-10T21:00:00.log
+6.7G    total
+</pre>
+</div></div>
+
+<p style="font-size: 14px !important; line-height: 20px !important;">This is only happening on one out of 3 nameservice zones</p>
+            <br>
+        </td>
+    </tr>
+    </tbody></table>
+
+    <br>
+
+    <table style="font-size: 14px !important; line-height: 20px !important;" width="100%" cellspacing="0" cellpadding="2" border="0" align="center">
+    <tbody style="font-size: 14px !important; line-height: 20px !important;"><tr style="font-size: 14px !important; line-height: 20px !important;">
+        <td style="font-size: 14px !important; line-height: 20px !important;" width="1%" nowrap="nowrap" bgcolor="#bbbbbb" align="center">
+            &nbsp;<font style="font-size: 14px !important; line-height: 20px !important;" color="#ffffff"><b style="font-size: 14px !important; line-height: 20px !important;">Comments</b></font>&nbsp;
+        </td>
+        <td style="font-size: 14px !important;">&nbsp;</td>
+    </tr>
+    </tbody></table>
+
+    <table class="grid" style="margin: 0px; font-size: 14px !important; line-height: 20px !important;" width="100%" cellspacing="0" cellpadding="0" border="0">
+                <tbody style="font-size: 14px !important; line-height: 20px !important;"><tr id="comment-header-283108" style="font-size: 14px !important; line-height: 20px !important;"><td style="font-size: 14px !important; line-height: 20px !important;" bgcolor="#f0f0f0">
+            Comment by  
+                                                        <a class="user-hover" rel="trent.mick" id="word_commented_trent.mick" href="https://jira.joyent.us/secure/ViewProfile.jspa?name=trent.mick" style="font-size: 14px !important; line-height: 20px !important;">Trent Mick</a>
+                                        <font style="font-size: 10px !important; line-height: 14.2833px !important;" size="-2">
+            [
+                <font style="font-size: 10px !important; line-height: 14.2833px !important;" color="#336699">13/Dec/19</font>
+
+                            ]
+            </font>
+
+        </td></tr>
+        <tr id="comment-body-283108" style="font-size: 14px !important; line-height: 20px !important;"><td style="font-size: 14px !important; line-height: 20px !important;" bgcolor="#ffffff">
+            <p style="font-size: 14px !important; line-height: 20px !important;">I have one nameservice zone in my COAL. It's zk started going crazy. In less than 7 minutes it generated 350MB in logs:</p>
+
+<div class="code panel" style="border-width: 1px; font-size: 12px !important; line-height: 16px !important;"><div class="codeContent panelContent" style="font-size: 12px !important; line-height: 16px !important;">
+<pre class="code-java" style="font-size: 12px !important; line-height: 16px !important;">-rw-r--r-- 1 zookeeper hadoop 350403551 Dec 13 22:06 zookeeper.log
+</pre>
+</div></div>
+
+<p style="font-size: 14px !important; line-height: 20px !important;">scary</p>
+
+<p style="font-size: 14px !important; line-height: 20px !important;">A pattern in the log file:</p>
+
+<div class="code panel" style="border-width: 1px; font-size: 12px !important; line-height: 16px !important;"><div class="codeContent panelContent" style="font-size: 12px !important; line-height: 16px !important;">
+<pre class="code-java" style="font-size: 12px !important; line-height: 16px !important;">2019-12-13 22:06:12,308 [myid:] - WARN  [NIOServerCxn.Factory:0.0.0.0/0.0.0.0:2181:ZooKeeperServer@792] - Connection request from old client /10.77.77.22:57903; will be dropped <span class="code-keyword" style="font-size: 12px !important; line-height: 16px !important;">if</span> server is in r-o mode
+2019-12-13 22:06:12,309 [myid:] - INFO  [NIOServerCxn.Factory:0.0.0.0/0.0.0.0:2181:ZooKeeperServer@831] - Client attempting to renew session 0x16f01204dda0021 at /10.77.77.22:57903
+2019-12-13 22:06:12,309 [myid:] - INFO  [NIOServerCxn.Factory:0.0.0.0/0.0.0.0:2181:ZooKeeperServer@604] - Established session 0x16f01204dda0021 with negotiated timeout 40000 <span class="code-keyword" style="font-size: 12px !important; line-height: 16px !important;">for</span> client /10.77.77.22:57903
+2019-12-13 22:06:12,324 [myid:] - WARN  [NIOServerCxn.Factory:0.0.0.0/0.0.0.0:2181:NIOServerCnxn@349] - caught end of stream exception
+EndOfStreamException: Unable to read additional data from client sessionid 0x16f01204dda0021, likely client has closed socket
+  at org.apache.zookeeper.server.NIOServerCnxn.doIO(NIOServerCnxn.java:220)
+  at org.apache.zookeeper.server.NIOServerCnxnFactory.run(NIOServerCnxnFactory.java:224)
+  at java.lang.<span class="code-object" style="font-size: 12px !important; line-height: 16px !important;">Thread</span>.run(<span class="code-object" style="font-size: 12px !important; line-height: 16px !important;">Thread</span>.java:662)
+2019-12-13 22:06:12,325 [myid:] - INFO  [NIOServerCxn.Factory:0.0.0.0/0.0.0.0:2181:NIOServerCnxn@1000] - Closed socket connection <span class="code-keyword" style="font-size: 12px !important; line-height: 16px !important;">for</span> client /10.77.77.22:57903 which had sessionid 0x16f01204dda0021
+2019-12-13 22:06:12,325 [myid:] - INFO  [NIOServerCxn.Factory:0.0.0.0/0.0.0.0:2181:NIOServerCnxnFactory@213] - Accepted socket connection from /10.77.77.22:51443
+2019-12-13 22:06:12,325 [myid:] - WARN  [NIOServerCxn.Factory:0.0.0.0/0.0.0.0:2181:ZooKeeperServer@792] - Connection request from old client /10.77.77.22:51443; will be dropped <span class="code-keyword" style="font-size: 12px !important; line-height: 16px !important;">if</span> server is in r-o mode
+2019-12-13 22:06:12,326 [myid:] - INFO  [NIOServerCxn.Factory:0.0.0.0/0.0.0.0:2181:ZooKeeperServer@831] - Client attempting to renew session 0x16f01204dda0021 at /10.77.77.22:51443
+2019-12-13 22:06:12,326 [myid:] - INFO  [NIOServerCxn.Factory:0.0.0.0/0.0.0.0:2181:ZooKeeperServer@604] - Established session 0x16f01204dda0021 with negotiated timeout 40000 <span class="code-keyword" style="font-size: 12px !important; line-height: 16px !important;">for</span> client /10.77.77.22:51443
+2019-12-13 22:06:12,387 [myid:] - WARN  [NIOServerCxn.Factory:0.0.0.0/0.0.0.0:2181:NIOServerCnxn@349] - caught end of stream exception
+EndOfStreamException: Unable to read additional data from client sessionid 0x16f01204dda0004, likely client has closed socket
+  at org.apache.zookeeper.server.NIOServerCnxn.doIO(NIOServerCnxn.java:220)
+  at org.apache.zookeeper.server.NIOServerCnxnFactory.run(NIOServerCnxnFactory.java:224)
+  at java.lang.<span class="code-object" style="font-size: 12px !important; line-height: 16px !important;">Thread</span>.run(<span class="code-object" style="font-size: 12px !important; line-height: 16px !important;">Thread</span>.java:662)
+2019-12-13 22:06:12,387 [myid:] - INFO  [NIOServerCxn.Factory:0.0.0.0/0.0.0.0:2181:NIOServerCnxn@1000] - Closed socket connection <span class="code-keyword" style="font-size: 12px !important; line-height: 16px !important;">for</span> client /10.77.77.7:61885 which had sessionid 0x16f01204dda0004
+2019-12-13 22:06:12,390 [myid:] - INFO  [NIOServerCxn.Factory:0.0.0.0/0.0.0.0:2181:NIOServerCnxnFactory@213] - Accepted socket connection from /10.77.77.7:47577
+2019-12-13 22:06:12,390 [myid:] - WARN  [NIOServerCxn.Factory:0.0.0.0/0.0.0.0:2181:ZooKeeperServer@792] - Connection request from old client /10.77.77.7:47577; will be dropped <span class="code-keyword" style="font-size: 12px !important; line-height: 16px !important;">if</span> server is in r-o mode
+2019-12-13 22:06:12,391 [myid:] - INFO  [NIOServerCxn.Factory:0.0.0.0/0.0.0.0:2181:ZooKeeperServer@831] - Client attempting to renew session 0x16f01204dda0004 at /10.77.77.7:47577
+2019-12-13 22:06:12,391 [myid:] - INFO  [NIOServerCxn.Factory:0.0.0.0/0.0.0.0:2181:ZooKeeperServer@604] - Established session 0x16f01204dda0004 with negotiated timeout 40000 <span class="code-keyword" style="font-size: 12px !important; line-height: 16px !important;">for</span> client /10.77.77.7:47577
+2019-12-13 22:06:12,398 [myid:] - WARN  [NIOServerCxn.Factory:0.0.0.0/0.0.0.0:2181:NIOServerCnxn@349] - caught end of stream exception
+EndOfStreamException: Unable to read additional data from client sessionid 0x16f01204dda000a, likely client has closed socket
+  at org.apache.zookeeper.server.NIOServerCnxn.doIO(NIOServerCnxn.java:220)
+  at org.apache.zookeeper.server.NIOServerCnxnFactory.run(NIOServerCnxnFactory.java:224)
+  at java.lang.<span class="code-object" style="font-size: 12px !important; line-height: 16px !important;">Thread</span>.run(<span class="code-object" style="font-size: 12px !important; line-height: 16px !important;">Thread</span>.java:662)
+2019-12-13 22:06:12,399 [myid:] - INFO  [NIOServerCxn.Factory:0.0.0.0/0.0.0.0:2181:NIOServerCnxn@1000] - Closed socket connection <span class="code-keyword" style="font-size: 12px !important; line-height: 16px !important;">for</span> client /10.77.77.9:45719 which had sessionid 0x16f01204dda000a
+2019-12-13 22:06:12,399 [myid:] - INFO  [NIOServerCxn.Factory:0.0.0.0/0.0.0.0:2181:NIOServerCnxnFactory@213] - Accepted socket connection from /10.77.77.9:34619
+2019-12-13 22:06:12,399 [myid:] - WARN  [NIOServerCxn.Factory:0.0.0.0/0.0.0.0:2181:ZooKeeperServer@792] - Connection request from old client /10.77.77.9:34619; will be dropped <span class="code-keyword" style="font-size: 12px !important; line-height: 16px !important;">if</span> server is in r-o mode
+2019-12-13 22:06:12,399 [myid:] - INFO  [NIOServerCxn.Factory:0.0.0.0/0.0.0.0:2181:ZooKeeperServer@831] - Client attempting to renew session 0x16f01204dda000a at /10.77.77.9:34619
+2019-12-13 22:06:12,400 [myid:] - INFO  [NIOServerCxn.Factory:0.0.0.0/0.0.0.0:2181:ZooKeeperServer@604] - Established session 0x16f01204dda000a with negotiated timeout 40000 <span class="code-keyword" style="font-size: 12px !important; line-height: 16px !important;">for</span> client /10.77.77.9:34619
+2019-12-13 22:06:12,407 [myid:] - WARN  [NIOServerCxn.Factory:0.0.0.0/0.0.0.0:2181:NIOServerCnxn@349] - caught end of stream exception
+EndOfStreamException: Unable to read additional data from client sessionid 0x16f01204dda0006, likely client has closed socket
+  at org.apache.zookeeper.server.NIOServerCnxn.doIO(NIOServerCnxn.java:220)
+  at org.apache.zookeeper.server.NIOServerCnxnFactory.run(NIOServerCnxnFactory.java:224)
+  at java.lang.<span class="code-object" style="font-size: 12px !important; line-height: 16px !important;">Thread</span>.run(<span class="code-object" style="font-size: 12px !important; line-height: 16px !important;">Thread</span>.java:662)
+2019-12-13 22:06:12,408 [myid:] - INFO  [NIOServerCxn.Factory:0.0.0.0/0.0.0.0:2181:NIOServerCnxn@1000] - Closed socket connection <span class="code-keyword" style="font-size: 12px !important; line-height: 16px !important;">for</span> client /10.77.77.8:55329 which had sessionid 0x16f01204dda0006
+2019-12-13 22:06:12,409 [myid:] - INFO  [NIOServerCxn.Factory:0.0.0.0/0.0.0.0:2181:NIOServerCnxnFactory@213] - Accepted socket connection from /10.77.77.8:60579
+2019-12-13 22:06:12,409 [myid:] - WARN  [NIOServerCxn.Factory:0.0.0.0/0.0.0.0:2181:ZooKeeperServer@792] - Connection request from old client /10.77.77.8:60579; will be dropped <span class="code-keyword" style="font-size: 12px !important; line-height: 16px !important;">if</span> server is in r-o mode
+2019-12-13 22:06:12,411 [myid:] - INFO  [NIOServerCxn.Factory:0.0.0.0/0.0.0.0:2181:ZooKeeperServer@831] - Client attempting to renew session 0x16f01204dda0006 at /10.77.77.8:60579
+2019-12-13 22:06:12,412 [myid:] - INFO  [NIOServerCxn.Factory:0.0.0.0/0.0.0.0:2181:ZooKeeperServer@604] - Established session 0x16f01204dda0006 with negotiated timeout 40000 <span class="code-keyword" style="font-size: 12px !important; line-height: 16px !important;">for</span> client /10.77.77.8:60579
+2019-12-13 22:06:12,434 [myid:] - WARN  [NIOServerCxn.Factory:0.0.0.0/0.0.0.0:2181:NIOServerCnxn@349] - caught end of stream exception
+...
+</pre>
+</div></div>
+        </td></tr>
+                <tr id="comment-header-283129" style="font-size: 14px !important; line-height: 20px !important;"><td style="font-size: 14px !important; line-height: 20px !important;" bgcolor="#f0f0f0">
+            Comment by  
+                                                        <a class="user-hover" rel="trent.mick" id="word_commented_trent.mick" href="https://jira.joyent.us/secure/ViewProfile.jspa?name=trent.mick" style="font-size: 14px !important; line-height: 20px !important;">Trent Mick</a>
+                                        <font style="font-size: 10px !important; line-height: 14.2833px !important;" size="-2">
+            [
+                <font style="font-size: 10px !important; line-height: 14.2833px !important;" color="#336699">13/Dec/19</font>
+
+                            ]
+            </font>
+
+        </td></tr>
+        <tr id="comment-body-283129" style="font-size: 14px !important; line-height: 20px !important;"><td style="font-size: 14px !important; line-height: 20px !important;" bgcolor="#ffffff">
+            <p style="font-size: 14px !important; line-height: 20px !important;">This
+ triggers on the hour. The client IPs going crazy are my two boray IPs. 
+ Isaac has a running theory that boray zk clients don't handle an hourly
+ hiccup well at all.</p>
+        </td></tr>
+                <tr id="comment-header-283594" style="font-size: 14px !important; line-height: 20px !important;"><td style="font-size: 14px !important; line-height: 20px !important;" bgcolor="#f0f0f0">
+            Comment by  
+                                                        <a class="user-hover" rel="tim.foster" id="word_commented_tim.foster" href="https://jira.joyent.us/secure/ViewProfile.jspa?name=tim.foster" style="font-size: 14px !important; line-height: 20px !important;">Tim Foster</a>
+                                        <font style="font-size: 10px !important; line-height: 14.2833px !important;" size="-2">
+            [
+                <font style="font-size: 10px !important; line-height: 14.2833px !important;" color="#336699">17/Dec/19</font>
+
+                            ]
+            </font>
+
+        </td></tr>
+        <tr id="comment-body-283594" style="font-size: 14px !important; line-height: 20px !important;"><td style="font-size: 14px !important; line-height: 20px !important;" bgcolor="#ffffff">
+            <p style="font-size: 14px !important; line-height: 20px !important;">I hit this today too. In my case, I was getting ECONNREFUSED when trying a mls from a client machine.</p>
+
+<p style="font-size: 14px !important; line-height: 20px !important;">The symptoms appeared in the muppet SMF logs as:</p>
+<div class="preformatted panel" style="border-width: 1px; font-size: 12px !important; line-height: 16px !important;"><div class="preformattedContent panelContent" style="font-size: 12px !important; line-height: 16px !important;">
+<pre style="font-size: 12px !important; line-height: 16px !important;">[2019-12-17T15:01:30.097Z]  WARN: muppet/ZKConnectionFSM/76872 on 50aaf8b2-ffbb-4054-9145-dbcf1f97747a: error communicating with ZK (zkAddress=10.77.77.6, zkPort=2181, err.code=ECONNREFUSED)
+    Error: connect ECONNREFUSED 10.77.77.6:2181
+        at Object.exports._errnoException (util.js:1020:11)
+        at exports._exceptionWithHostPort (util.js:1043:20)
+        at TCPConnectWrap.afterConnect [as oncomplete] (net.js:1099:14)</pre>
+</div></div>
+<p style="font-size: 14px !important; line-height: 20px !important;">and then showing the nameservice zone was dead:</p>
+<div class="preformatted panel" style="border-width: 1px; font-size: 12px !important; line-height: 16px !important;"><div class="preformattedContent panelContent" style="font-size: 12px !important; line-height: 16px !important;">
+<pre style="font-size: 12px !important; line-height: 16px !important;">[root@headnode (Europe) ~]# zlogin name[completed alias: nameservice.Earth.example.com-4701a8df]
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; 4701a8df-8cfb-4d74-ae67-31e3199f44e0
+[Connected to zone '4701a8df-8cfb-4d74-ae67-31e3199f44e0' pts/5]
+No utmpx entry. You must exec "login" from the lowest level "shell".
+
+[Connection to zone '4701a8df-8cfb-4d74-ae67-31e3199f44e0' pts/5 closed]
+[root@headnode (Europe) ~]#
+</pre>
+</div></div>
+        </td></tr>
+                <tr id="comment-header-283793" style="font-size: 14px !important; line-height: 20px !important;"><td style="font-size: 14px !important; line-height: 20px !important;" bgcolor="#f0f0f0">
+            Comment by  
+                                                        <a class="user-hover" rel="isaac.davis" id="word_commented_isaac.davis" href="https://jira.joyent.us/secure/ViewProfile.jspa?name=isaac.davis" style="font-size: 14px !important; line-height: 20px !important;">Isaac Davis</a>
+                                        <font style="font-size: 10px !important; line-height: 14.2833px !important;" size="-2">
+            [
+                <font style="font-size: 10px !important; line-height: 14.2833px !important;" color="#336699">18/Dec/19</font>
+
+                            ]
+            </font>
+
+        </td></tr>
+        <tr id="comment-body-283793" style="font-size: 14px !important; line-height: 20px !important;"><td style="font-size: 14px !important; line-height: 20px !important;" bgcolor="#ffffff">
+            <p style="font-size: 14px !important; line-height: 20px !important;">So, what's going on here? Well, a lot of things:</p>
+
+<p style="font-size: 14px !important; line-height: 20px !important;">First,
+ the log spam is caused by the boray zookeeper clients. The log entries'
+ client IPs match those of the boray zones. Furthermore, when I caught 
+the log spam as it was happening and disabled the boray zones, the log 
+spam stopped.</p>
+
+<p style="font-size: 14px !important; line-height: 20px !important;">When I restarted the boray services after disabling them in the scenario above, the log spam did <em style="font-size: 14px !important; line-height: 20px !important;">not</em>
+ start happening again. This suggests some discrete "event" that starts 
+the chain of pathological behavior and puts the client and/or server 
+into a pathological state, rather than an ongoing server state 
+independent of the client that causes the behavior – otherwise, the log 
+spam would have resumed as soon as I restarted the borays. I'm not sure 
+if this "event" happens on the server side or the client side.</p>
+
+<p style="font-size: 14px !important; line-height: 20px !important;">The
+ log spam seems more likely to occur around the top of the hour. Perhaps
+ the hourly log upload is producing some strain on either the boray or 
+nameservice zones, causing the pathology to occur.</p>
+
+<p style="font-size: 14px !important; line-height: 20px !important;">The
+ log spam appears to occur in bursts at roughly one-second intervals. I 
+believe this is because the client's heartbeat interval is one second. 
+See Trent's comment above for a representative sample of server logs. 
+Here is a representative sample of client logs:</p>
+
+<div class="preformatted panel" style="border-width: 1px; font-size: 12px !important; line-height: 16px !important;"><div class="preformattedContent panelContent" style="font-size: 12px !important; line-height: 16px !important;">
+<pre style="font-size: 12px !important; line-height: 16px !important;">[2019-12-18T00:07:46.792858064+00:00] TRACE: boray/ManateePrimaryResolver/99273 on f3f89bf3-8a92-4d59-8284-d1484140da18: packetizer polled
+[2019-12-18T00:07:46.793201737+00:00] TRACE: boray/ManateePrimaryResolver/99273 on f3f89bf3-8a92-4d59-8284-d1484140da18: poll_enqueue
+[2019-12-18T00:07:46.793566477+00:00] TRACE: boray/ManateePrimaryResolver/99273 on f3f89bf3-8a92-4d59-8284-d1484140da18: re-connection response: Err(Canceled)
+[2019-12-18T00:07:46.794087370+00:00] TRACE: boray/ManateePrimaryResolver/99273 on f3f89bf3-8a92-4d59-8284-d1484140da18: packetizer polled
+[2019-12-18T00:07:46.794351138+00:00] TRACE: boray/ManateePrimaryResolver/99273 on f3f89bf3-8a92-4d59-8284-d1484140da18: poll_enqueue
+[2019-12-18T00:07:46.794654346+00:00] TRACE: boray/ManateePrimaryResolver/99273 on f3f89bf3-8a92-4d59-8284-d1484140da18: about to handshake (again)
+[2019-12-18T00:07:46.795135174+00:00] TRACE: boray/ManateePrimaryResolver/99273 on f3f89bf3-8a92-4d59-8284-d1484140da18: poll_read
+[2019-12-18T00:07:46.795413107+00:00] TRACE: boray/ManateePrimaryResolver/99273 on f3f89bf3-8a92-4d59-8284-d1484140da18: need 4 bytes, have 0
+[2019-12-18T00:07:46.795737234+00:00] TRACE: boray/ManateePrimaryResolver/99273 on f3f89bf3-8a92-4d59-8284-d1484140da18: poll_read
+[2019-12-18T00:07:46.796200539+00:00] TRACE: boray/ManateePrimaryResolver/99273 on f3f89bf3-8a92-4d59-8284-d1484140da18: resetting heartbeat timer
+[2019-12-18T00:07:46.801870603+00:00] TRACE: boray/ManateePrimaryResolver/99273 on f3f89bf3-8a92-4d59-8284-d1484140da18: packetizer polled
+[2019-12-18T00:07:46.802332399+00:00] TRACE: boray/ManateePrimaryResolver/99273 on f3f89bf3-8a92-4d59-8284-d1484140da18: poll_enqueue
+[2019-12-18T00:07:46.802645550+00:00] TRACE: boray/ManateePrimaryResolver/99273 on f3f89bf3-8a92-4d59-8284-d1484140da18: poll_read
+[2019-12-18T00:07:46.802899555+00:00] TRACE: boray/ManateePrimaryResolver/99273 on f3f89bf3-8a92-4d59-8284-d1484140da18: need 4 bytes, have 0
+</pre>
+</div></div>
+
+<p style="font-size: 14px !important; line-height: 20px !important;">The above corresponds to <em style="font-size: 14px !important; line-height: 20px !important;">one</em> run-through of the retry logic. Multiple repetitions of the retry logic occur in each one-second burst of log spam.</p>
+
+<p style="font-size: 14px !important; line-height: 20px !important;">I've
+ also observed a different pattern where the log spam occurs for 10 
+seconds (perhaps still at one-second intervals) and then stops. I think 
+this 10 seconds corresponds to the manatee primary resolver's 10--second
+ reconnect delay. In this case, it seems that the zookeeper client is 
+trying to reconnect behind the scenes. However, sometimes the spam 
+continues for longer than 10 seconds.</p>
+
+<p style="font-size: 14px !important; line-height: 20px !important;">The
+ tokio-zookeeper client we're using is rather suspect. The code is quite
+ knotty and hard to follow, and the project appears unfinished. Of 
+particular concern is the client's retry logic.</p>
+
+<p style="font-size: 14px !important; line-height: 20px !important;">The client's intended retry behavior is this:</p>
+
+<p style="font-size: 14px !important; line-height: 20px !important;">If 
+the connection is lost, the client will immediately try reconnecting 
+once. If that reconnect operation also fails, the client will exit with 
+an error.</p>
+
+<p style="font-size: 14px !important; line-height: 20px !important;">The
+ problem with this is that there's no upper bound on the rate at which a
+ client can retry – what if the server accepts connections but then 
+immediately disconnects, over and over? The client will retry endlessly.
+ I have confirmed that the client does really exit when I restart the 
+server, rather than retry endlessly.</p>
+
+<p style="font-size: 14px !important; line-height: 20px !important;">I'm particularly worried about the catch-all reconnect criteria here:</p>
+
+<p style="font-size: 14px !important; line-height: 20px !important;"><a href="https://github.com/joyent/tokio-zookeeper/blob/e0159ef16b8415c6621c828f358645466abfe43a/src/proto/packetizer.rs#L211-#L213" class="external-link" rel="nofollow" style="font-size: 14px !important; line-height: 20px !important;">https://github.com/joyent/tokio-zookeeper/blob/e0159ef16b8415c6621c828f358645466abfe43a/src/proto/packetizer.rs#L211-#L213</a></p>
+
+<p style="font-size: 14px !important; line-height: 20px !important;">because
+ it's possible that the server is not actually disconnecting, but is 
+producing some error that could be handled more delicately.</p>
+
+<p style="font-size: 14px !important; line-height: 20px !important;">I've
+ added a `println!` to try to figure out what error the server is 
+actually producing here. However, I'm still unable to reproduce the log 
+spam on my own, so I have to wait and catch it in the act. This is not 
+ideal.</p>
+
+<p style="font-size: 14px !important; line-height: 20px !important;">For
+ now, I've just removed the reconnect logic entirely. The cueball 
+primary resolver has its own reconnect logic – it retries every 10 
+seconds until a connection is successful. This should hopefully be 
+sufficient in the short term, and will at least provide an upper bound 
+on the log spam. In the long term, perhaps we should do exponential 
+backoff in the zookeeper client and remove the reconnect logic from the 
+primary resolver. See <a href="https://jira.joyent.us/browse/MANTA-4896" title="Add exponential backoff logic for reconnecting to zookeeper in either the manatee primary resolver or the zookeeper client library" class="issue-link" data-issue-key="MANTA-4896" style="font-size: 14px !important; line-height: 20px !important;">MANTA-4896</a> for that.</p>
+
+<p style="font-size: 14px !important; line-height: 20px !important;">The
+ zookeeper client is so convoluted and difficult to reason about that it
+ may be worth writing our own, or diverging our fork substantially 
+without intent to merge changes upstream. See <a href="https://jira.joyent.us/browse/MANTA-4897" title="Create long-term plan for rust zookeeper client" class="issue-link" data-issue-key="MANTA-4897" style="font-size: 14px !important; line-height: 20px !important;">MANTA-4897</a> for that.</p>
+
+<p style="font-size: 14px !important; line-height: 20px !important;">For
+ now: I have two borays running: one with the retry logic removed, and 
+one running the "debug" branch of the client, with the extra `println!` 
+statement. I'm going to let these sit until the log spam starts and I 
+can verify that only the latter client produces the log spam. Then, I'll
+ update the manatee primary resolver and boray to use the newest client 
+version.</p>
+        </td></tr>
+                <tr id="comment-header-284223" style="font-size: 14px !important; line-height: 20px !important;"><td style="font-size: 14px !important; line-height: 20px !important;" bgcolor="#f0f0f0">
+            Comment by  
+                                                        <a class="user-hover" rel="isaac.davis" id="word_commented_isaac.davis" href="https://jira.joyent.us/secure/ViewProfile.jspa?name=isaac.davis" style="font-size: 14px !important; line-height: 20px !important;">Isaac Davis</a>
+                                        <font style="font-size: 10px !important; line-height: 14.2833px !important;" size="-2">
+            [
+                <font style="font-size: 10px !important; line-height: 14.2833px !important;" color="#336699">19/Dec/19</font>
+
+                            ]
+            </font>
+
+        </td></tr>
+        <tr id="comment-body-284223" style="font-size: 14px !important; line-height: 20px !important;"><td style="font-size: 14px !important; line-height: 20px !important;" bgcolor="#ffffff">
+            <p style="font-size: 14px !important; line-height: 20px !important;">Testing
+ notes for boray without the retry logic: I built a boray binary using 
+the new primary resolver and deployed it. I was able to list buckets as 
+before. I restarted the zookeeper service and watched the boray logs, 
+and boray still reconnected, using the primary resolver's reconnect 
+logic.</p>
+        </td></tr>
+                <tr id="comment-header-284224" style="font-size: 14px !important; line-height: 20px !important;"><td style="font-size: 14px !important; line-height: 20px !important;" bgcolor="#f0f0f0">
+            Comment by  
+                                                        <a class="user-hover" rel="isaac.davis" id="word_commented_isaac.davis" href="https://jira.joyent.us/secure/ViewProfile.jspa?name=isaac.davis" style="font-size: 14px !important; line-height: 20px !important;">Isaac Davis</a>
+                                        <font style="font-size: 10px !important; line-height: 14.2833px !important;" size="-2">
+            [
+                <font style="font-size: 10px !important; line-height: 14.2833px !important;" color="#336699">19/Dec/19</font>
+
+                            ]
+            </font>
+
+        </td></tr>
+        <tr id="comment-body-284224" style="font-size: 14px !important; line-height: 20px !important;"><td style="font-size: 14px !important; line-height: 20px !important;" bgcolor="#ffffff">
+            <p style="font-size: 14px !important; line-height: 20px !important;">We have some anecdotal results:</p>
+
+<p style="font-size: 14px !important; line-height: 20px !important;">Trent
+ (who was running into the problem consistently) deployed a boray using 
+the new primary resolver and a boray using the old primary resolver. The
+ next time the ZK log spam happened, the only log entries were from the 
+"old boray."</p>
+        </td></tr>
+                <tr id="comment-header-284227" style="font-size: 14px !important; line-height: 20px !important;"><td style="font-size: 14px !important; line-height: 20px !important;" bgcolor="#f0f0f0">
+            Comment by  
+                                                        <a class="user-hover" rel="jirabot" id="word_commented_jirabot" href="https://jira.joyent.us/secure/ViewProfile.jspa?name=jirabot" style="font-size: 14px !important; line-height: 20px !important;">Jira Bot</a>
+                                        <font style="font-size: 10px !important; line-height: 14.2833px !important;" size="-2">
+            [
+                <font style="font-size: 10px !important; line-height: 14.2833px !important;" color="#336699">19/Dec/19</font>
+
+                            ]
+            </font>
+
+        </td></tr>
+        <tr id="comment-body-284227" style="font-size: 14px !important; line-height: 20px !important;"><td style="font-size: 14px !important; line-height: 20px !important;" bgcolor="#ffffff">
+            <div class="panel" style="background-color: rgb(211, 225, 254); border-color: rgb(204, 204, 204); border-style: solid; border-width: 1px; font-size: 14px !important; line-height: 20px !important;"><div class="panelContent" style="background-color: rgb(211, 225, 254); font-size: 14px !important; line-height: 20px !important;">
+<p style="font-size: 14px !important; line-height: 20px !important;"><b style="font-size: 14px !important; line-height: 20px !important;"><a href="https://github.com/joyent/buckets-mdapi/commit/64ad461ef953e04b09531c18a8c0ac4b89c0b678" class="external-link" rel="nofollow" style="font-size: 14px !important; line-height: 20px !important;">buckets-mdapi commit 64ad461ef953e04b09531c18a8c0ac4b89c0b678</a></b> <b style="font-size: 14px !important; line-height: 20px !important;">(</b><b style="font-size: 14px !important; line-height: 20px !important;"><a href="https://github.com/joyent/buckets-mdapi/commits/master" class="external-link" rel="nofollow" style="font-size: 14px !important; line-height: 20px !important;">branch master</a></b><b style="font-size: 14px !important; line-height: 20px !important;">, by Isaac Davis)</b></p>
+
+<p style="font-size: 14px !important; line-height: 20px !important;"><a href="https://jira.joyent.us/browse/MANTA-4856" title="nameservice zone filling up with zookeeper logs" class="issue-link" data-issue-key="MANTA-4856" style="font-size: 14px !important; line-height: 20px !important;">MANTA-4856</a> nameservice zone filling up with zookeeper logs (#28)</p>
+</div></div>
+        </td></tr>
+                <tr id="comment-header-284228" style="font-size: 14px !important; line-height: 20px !important;"><td style="font-size: 14px !important; line-height: 20px !important;" bgcolor="#f0f0f0">
+            Comment by  
+                                                        <a class="user-hover" rel="isaac.davis" id="word_commented_isaac.davis" href="https://jira.joyent.us/secure/ViewProfile.jspa?name=isaac.davis" style="font-size: 14px !important; line-height: 20px !important;">Isaac Davis</a>
+                                        <font style="font-size: 10px !important; line-height: 14.2833px !important;" size="-2">
+            [
+                <font style="font-size: 10px !important; line-height: 14.2833px !important;" color="#336699">19/Dec/19</font>
+
+                            ]
+            </font>
+
+        </td></tr>
+        <tr id="comment-body-284228" style="font-size: 14px !important; line-height: 20px !important;"><td style="font-size: 14px !important; line-height: 20px !important;" bgcolor="#ffffff">
+            <p style="font-size: 14px !important; line-height: 20px !important;">We have some guidance on how to reproduce the problem, from Trent:</p>
+
+<div class="preformatted panel" style="border-width: 1px; font-size: 12px !important; line-height: 16px !important;"><div class="preformattedContent panelContent" style="font-size: 12px !important; line-height: 16px !important;">
+<pre style="font-size: 12px !important; line-height: 16px !important;">isaac: possible repro scenario for you for your system, if it is COAL:
+
+load up your Mac until Activity Monitor says your memory pressure is 15GB of 16GB used
+run jr up in a directory will all our repos cloned
+That just triggered it for me, mid hour. Still a crap shoot.
+</pre>
+</div></div>
+
+<p style="font-size: 14px !important; line-height: 20px !important;">This
+ suggests that increased memory/cpu load exacerbates the problem – hence
+ why it happens hourly (coinciding with the hourly log upload)</p>
+        </td></tr>
+            </tbody></table>
+Generated at Sun Jan 05 04:30:49 UTC 2020 by Isaac Davis using JIRA 7.5.4#75010-sha1:d6e4c9ebd9bec357a38456ebbacbd155bbc83999.
+
+
+</body></html>
